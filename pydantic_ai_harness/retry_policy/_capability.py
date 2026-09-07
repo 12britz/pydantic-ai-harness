@@ -208,13 +208,21 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
 
     def calculate_delay(self, attempt: int, tool_name: str) -> float:
         """Calculate delay with exponential backoff and jitter."""
+        import math
         import random
 
         config = self.get_tool_config(tool_name)
         backoff_factor = config.get('backoff_factor', self.backoff_factor)
         max_backoff = config.get('max_backoff', self.max_backoff)
 
-        delay = backoff_factor * (2 ** attempt)
+        # Check if delay would exceed max_backoff before computing 2^attempt
+        # to avoid OverflowError on large attempt values
+        if backoff_factor > 0 and attempt > math.log2(max_backoff / backoff_factor):
+            delay = max_backoff
+        else:
+            delay = backoff_factor * (2 ** attempt)
+            delay = min(delay, max_backoff)
+
         jitter = delay * 0.25 * (2 * random.random() - 1)
         return min(max_backoff, max(0.01, delay + jitter))
 
