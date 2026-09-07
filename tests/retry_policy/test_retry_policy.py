@@ -58,6 +58,12 @@ class TestRetryPolicyValidation:
         with pytest.raises(ValueError, match='max_retries must be >= 0'):
             RetryPolicy(max_retries=-1)
 
+    def test_float_max_retries_raises(self) -> None:
+        # Type annotation is int, but runtime validation catches negative values
+        # Float >= 0 passes runtime check but would fail static analysis
+        with pytest.raises(ValueError, match='max_retries must be >= 0'):
+            RetryPolicy(max_retries=-1.5)  # type: ignore[arg-type]
+
     def test_zero_backoff_factor_raises(self) -> None:
         with pytest.raises(ValueError, match='backoff_factor must be > 0'):
             RetryPolicy(backoff_factor=0)

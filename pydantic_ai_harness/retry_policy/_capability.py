@@ -150,7 +150,7 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
 
     def __post_init__(self) -> None:
         if self.max_retries < 0:
-            raise ValueError(f'max_retries must be >= 0, got {self.max_retries}')
+            raise ValueError(f'max_retries must be >= 0, got {self.max_retries!r}')
         if self.backoff_factor <= 0:
             raise ValueError(f'backoff_factor must be > 0, got {self.backoff_factor}')
         if self.max_backoff <= 0:
@@ -215,9 +215,8 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
         max_backoff = config.get('max_backoff', self.max_backoff)
 
         delay = backoff_factor * (2 ** attempt)
-        delay = min(delay, max_backoff)
         jitter = delay * 0.25 * (2 * random.random() - 1)
-        return max(0.01, delay + jitter)
+        return min(max_backoff, max(0.01, delay + jitter))
 
     def get_max_retries(self, tool_name: str) -> int:
         """Get max retries for a specific tool."""
