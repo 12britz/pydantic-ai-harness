@@ -30,7 +30,8 @@ classifiers = [
 dependencies = [
     "genai-prices>=0.0.71",
     "httpx>=0.28.1",
-    "pydantic-ai-slim>=2.38.0",
+    "json-repair>=0.58.0",
+    "pydantic-ai-slim>=2.40.0",
 ]
 
 [project.optional-dependencies]
@@ -38,22 +39,22 @@ dependencies = [
 # without separately naming pydantic-ai-slim. (No openai/google pass-throughs: browser-use pins
 # provider SDKs that conflict with slim's floors when the workspace resolves all extras together.)
 anthropic = [
-    "pydantic-ai-slim[anthropic]>=2.38.0",
+    "pydantic-ai-slim[anthropic]>=2.40.0",
 ]
 cli = [
-    "pydantic-ai-slim[cli]>=2.38.0",
+    "pydantic-ai-slim[cli]>=2.40.0",
 ]
 code-mode = [
-    "pydantic-ai-slim[duckduckgo]>=2.38.0",
-    "pydantic-monty>=0.0.19",
+    "pydantic-ai-slim[duckduckgo]>=2.40.0",
+    "pydantic-monty>=0.0.23",
 ]
 # Extras metadata has no native redirect syntax, so aliases are represented as duplicate extras.
 codemode = [
-    "pydantic-ai-slim[duckduckgo]>=2.38.0",
-    "pydantic-monty>=0.0.19",
+    "pydantic-ai-slim[duckduckgo]>=2.40.0",
+    "pydantic-monty>=0.0.23",
 ]
 researcher = [
-    "pydantic-ai-slim[duckduckgo,web-fetch]>=2.38.0",
+    "pydantic-ai-slim[duckduckgo,web-fetch]>=2.40.0",
 ]
 temporal = [
     'pydantic-ai-slim[temporal]',
@@ -69,7 +70,7 @@ modal = [
     "modal>=1.5.0",
 ]
 dynamic-workflow = [
-    "pydantic-monty>=0.0.19",
+    "pydantic-monty>=0.0.23",
 ]
 acp = [
     # The SDK breaks across minors, so cap per minor.
@@ -80,10 +81,10 @@ exa = [
 ]
 aws-lambda = [
     "aws-durable-execution-sdk-python>=1.7.0 ; python_full_version >= '3.11'",
-    "pydantic-ai-slim>=2.38.0",
+    "pydantic-ai-slim>=2.40.0",
 ]
 youdotcom = [
-    "youdotcom>=3.1.1,<4",
+    "youdotcom>=3.1.2,<4",
 ]
 mongodb = [
     "pymongo>=4.17.0",
@@ -108,6 +109,9 @@ prompt-injection-defender = [
 prompt-injection-defender-ml = [
     "stackone-defender[onnx]>=0.7.3,<0.8 ; python_full_version >= '3.11'",
 ]
+coder = [
+    "ripgrep==14.1.0 ; sys_platform != 'android'",
+]
 
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-ai-harness'
@@ -116,7 +120,7 @@ Issues = 'https://github.com/pydantic/pydantic-ai-harness/issues'
 
 [dependency-groups]
 dev = [
-    'pydantic-ai-harness[code-mode]',
+    'pydantic-ai-harness[code-mode,coder]',
     # Floors selected to keep the `test-floor` job (using `--resolution lowest-direct`)
     # working: `anyio>=4.11.0` is when the pytest plugin started registering the
     # `anyio_mode` ini option. `pytest-anyio` has only version 0.0.0 on PyPI, so no
