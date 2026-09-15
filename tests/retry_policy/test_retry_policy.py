@@ -130,6 +130,30 @@ class TestRetryLogic:
         assert policy.get_max_retries('web_search') == 2
         assert policy.get_max_retries('other_tool') == 5
 
+    @pytest.mark.parametrize('status', [429, 400, None])
+    @pytest.mark.parametrize('nested', [False, True])
+    def test_http_error_status(self, status: int | None, nested: bool) -> None:
+        class Response:
+            status_code = status
+
+        class HttpError(Exception):
+            status_code = None if nested else status
+            response = Response() if nested else None
+
+        assert RetryPolicy().should_retry(HttpError(), 'tool') is (status == 429)
+
+    @pytest.mark.parametrize('error_type', ['rate_limit', 'timeout', 'server_error', 'invalid'])
+    def test_provider_error_type(self, error_type: str) -> None:
+        class ProviderError(Exception):
+            def __init__(self) -> None:
+                self.error_type = error_type
+
+        assert RetryPolicy().should_retry(ProviderError(), 'tool') is (error_type != 'invalid')
+
+    def test_valid_max_backoff_override(self) -> None:
+        policy = RetryPolicy(tool_overrides={'tool': {'max_backoff': 1.0}})
+        assert policy.calculate_delay(100, 'tool') <= 1.0
+
     def test_should_retry_timeout_error(self) -> None:
         policy = RetryPolicy()
         assert policy.should_retry(TimeoutError('timeout'), 'tool') is True
@@ -285,6 +309,49 @@ class TestIdempotency:
 
 
 class TestAgentIntegration:
+    @pytest.mark.parametrize('with_callbacks', [False, True])
+    @pytest.mark.parametrize('outcome', ['success', 'exhausted', 'nonretryable', 'unsafe'])
+    async def test_tool_execution(self, with_callbacks: bool, outcome: str) -> None:
+        retries: list[int] = []
+        failures: list[Exception] = []
+        attempts = 0
+
+        def on_retry(tool: str, attempt: int, exc: Exception) -> None:
+            retries.append(attempt)
+
+        def on_failure(tool: str, exc: Exception) -> None:
+            failures.append(exc)
+
+        policy = RetryPolicy(
+            max_retries=1,
+            backoff_factor=0.001,
+            max_backoff=0.001,
+            allow_idempotent_retries=outcome != 'unsafe',
+            idempotent_tools=frozenset({'lookup'}),
+            on_retry=on_retry if with_callbacks else None,
+            on_failure=on_failure if with_callbacks else None,
+        )
+        agent = Agent(TestModel(), capabilities=[policy])
+
+        @agent.tool_plain
+        def lookup() -> str:
+            nonlocal attempts
+            attempts += 1
+            if outcome == 'nonretryable':
+                raise ValueError('invalid')
+            if outcome == 'success' and attempts == 2:
+                return 'found'
+            raise TimeoutError('timeout')
+
+        if outcome == 'success':
+            await agent.run('lookup')
+        else:
+            with pytest.raises(ValueError if outcome == 'nonretryable' else TimeoutError):
+                await agent.run('lookup')
+        assert attempts == (2 if outcome in ('success', 'exhausted') else 1)
+        assert retries == ([1] if with_callbacks and attempts == 2 else [])
+        assert len(failures) == int(with_callbacks and outcome in ('exhausted', 'unsafe'))
+
     def test_retry_policy_instantiation(self) -> None:
         policy = RetryPolicy(max_retries=2)
         assert policy.max_retries == 2

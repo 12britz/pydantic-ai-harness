@@ -243,7 +243,6 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
         max_retries = self.get_max_retries(tool_name)
         on_retry = self._get_on_retry(tool_name)
         on_failure = self._get_on_failure(tool_name)
-        last_exception: Exception | None = None
         handler_entered = False
 
         for attempt in range(max_retries + 1):
@@ -251,8 +250,6 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
             try:
                 return await handler(args)
             except Exception as exc:
-                last_exception = exc
-
                 if not self.should_retry(exc, tool_name):
                     raise
 
@@ -275,4 +272,4 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
                         on_failure(tool_name, exc)
                     raise
 
-        raise last_exception  # type: ignore[misc]
+        raise AssertionError('Validated retry count guarantees at least one attempt')  # pragma: no cover
