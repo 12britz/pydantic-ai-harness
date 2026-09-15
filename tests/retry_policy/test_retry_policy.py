@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
@@ -94,6 +96,12 @@ class TestRetryPolicyValidation:
         with pytest.raises(ValueError, match=r"tool_overrides\['bad'\]\['backoff_factor'\] must be > 0"):
             RetryPolicy(tool_overrides={'bad': {'backoff_factor': 0}})
 
+    @pytest.mark.parametrize('field_name', ['backoff_factor', 'max_backoff'])
+    @pytest.mark.parametrize('value', [float('inf'), float('-inf'), float('nan')])
+    def test_tool_override_nonfinite_backoff_raises(self, field_name: str, value: float) -> None:
+        with pytest.raises(ValueError, match='must be > 0 and finite'):
+            RetryPolicy(tool_overrides={'bad': {field_name: value}})
+
     def test_tool_override_negative_max_backoff_raises(self) -> None:
         with pytest.raises(ValueError, match=r"tool_overrides\['bad'\]\['max_backoff'\] must be > 0"):
             RetryPolicy(tool_overrides={'bad': {'max_backoff': -5}})
@@ -143,9 +151,7 @@ class TestRetryLogic:
         assert policy.should_retry(TimeoutError('timeout'), 'tool') is False
 
     def test_should_retry_per_tool_override(self) -> None:
-        policy = RetryPolicy(
-            tool_overrides={'safe_tool': {'retryable_exceptions': ()}}
-        )
+        policy = RetryPolicy(tool_overrides={'safe_tool': {'retryable_exceptions': ()}})
         assert policy.should_retry(TimeoutError('timeout'), 'tool') is True
         assert policy.should_retry(TimeoutError('timeout'), 'safe_tool') is False
 
@@ -195,22 +201,38 @@ class TestCallbacks:
 
     def test_per_tool_on_retry_override(self) -> None:
         calls: list[str] = []
+
+        def on_retry(tool: str, attempt: int, exc: Exception) -> None:
+            calls.append('special')
+
         policy = RetryPolicy(
             on_retry=lambda tool, attempt, exc: calls.append('default'),
-            tool_overrides={'special': {'on_retry': lambda tool, attempt, exc: calls.append('special')}},
+            tool_overrides={'special': {'on_retry': on_retry}},
         )
-        policy._get_on_retry('default_tool')('default_tool', 1, Exception())
-        policy._get_on_retry('special')('special', 1, Exception())
+        default_callback = policy._get_on_retry('default_tool')
+        special_callback = policy._get_on_retry('special')
+        assert default_callback is not None
+        assert special_callback is not None
+        default_callback('default_tool', 1, Exception())
+        special_callback('special', 1, Exception())
         assert calls == ['default', 'special']
 
     def test_per_tool_on_failure_override(self) -> None:
         calls: list[str] = []
+
+        def on_failure(tool: str, exc: Exception) -> None:
+            calls.append('special')
+
         policy = RetryPolicy(
             on_failure=lambda tool, exc: calls.append('default'),
-            tool_overrides={'special': {'on_failure': lambda tool, exc: calls.append('special')}},
+            tool_overrides={'special': {'on_failure': on_failure}},
         )
-        policy._get_on_failure('default_tool')('default_tool', Exception())
-        policy._get_on_failure('special')('special', Exception())
+        default_callback = policy._get_on_failure('default_tool')
+        special_callback = policy._get_on_failure('special')
+        assert default_callback is not None
+        assert special_callback is not None
+        default_callback('default_tool', Exception())
+        special_callback('special', Exception())
         assert calls == ['default', 'special']
 
 
@@ -242,13 +264,12 @@ class TestIdempotency:
         """Non-idempotent tools should not retry after handler has been entered."""
         call_count = 0
 
-        async def handler(args: Any) -> str:
+        async def handler(args: object) -> str:
             nonlocal call_count
             call_count += 1
             raise TimeoutError('timeout')
 
         policy = RetryPolicy(max_retries=3)
-        from unittest.mock import MagicMock
         ctx = MagicMock()
         call = MagicMock()
         call.tool_name = 'write_tool'

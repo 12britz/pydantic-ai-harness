@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -50,21 +51,15 @@ def _validate_tool_overrides(tool_overrides: dict[str, dict[str, Any]]) -> None:
         if 'max_retries' in config:
             val = config['max_retries']
             if not isinstance(val, int) or val < 0:
-                raise ValueError(
-                    f"tool_overrides['{tool_name}']['max_retries'] must be >= 0, got {val!r}"
-                )
+                raise ValueError(f"tool_overrides['{tool_name}']['max_retries'] must be >= 0, got {val!r}")
         if 'backoff_factor' in config:
             val = config['backoff_factor']
-            if not isinstance(val, (int, float)) or val <= 0:
-                raise ValueError(
-                    f"tool_overrides['{tool_name}']['backoff_factor'] must be > 0, got {val!r}"
-                )
+            if not isinstance(val, (int, float)) or not math.isfinite(val) or val <= 0:
+                raise ValueError(f"tool_overrides['{tool_name}']['backoff_factor'] must be > 0 and finite, got {val!r}")
         if 'max_backoff' in config:
             val = config['max_backoff']
-            if not isinstance(val, (int, float)) or val <= 0:
-                raise ValueError(
-                    f"tool_overrides['{tool_name}']['max_backoff'] must be > 0, got {val!r}"
-                )
+            if not isinstance(val, (int, float)) or not math.isfinite(val) or val <= 0:
+                raise ValueError(f"tool_overrides['{tool_name}']['max_backoff'] must be > 0 and finite, got {val!r}")
 
 
 @dataclass
@@ -104,14 +99,10 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
     max_backoff: float = 30.0
     """Maximum delay in seconds between retries."""
 
-    retryable_status_codes: tuple[int, ...] = field(
-        default_factory=_default_retryable_status_codes
-    )
+    retryable_status_codes: tuple[int, ...] = field(default_factory=_default_retryable_status_codes)
     """HTTP status codes that trigger a retry."""
 
-    retryable_exceptions: tuple[type[Exception], ...] = field(
-        default_factory=_default_retryable_exceptions
-    )
+    retryable_exceptions: tuple[type[Exception], ...] = field(default_factory=_default_retryable_exceptions)
     """Exception types that trigger a retry."""
 
     tool_overrides: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
@@ -149,9 +140,7 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
     """
 
     def __post_init__(self) -> None:
-        import math
-
-        if not isinstance(self.max_retries, int) or self.max_retries < 0:
+        if not isinstance(self.max_retries, int) or self.max_retries < 0:  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ValueError(f'max_retries must be an int >= 0, got {self.max_retries!r}')
         if not math.isfinite(self.backoff_factor) or self.backoff_factor <= 0:
             raise ValueError(f'backoff_factor must be a finite > 0, got {self.backoff_factor}')
@@ -278,8 +267,7 @@ class RetryPolicy(AbstractCapability[AgentDepsT]):
                     if on_retry:
                         on_retry(tool_name, attempt + 1, exc)
                     logger.warning(
-                        f"Retry {attempt + 1}/{max_retries} for tool '{tool_name}' "
-                        f"after {delay:.2f}s: {exc}"
+                        f"Retry {attempt + 1}/{max_retries} for tool '{tool_name}' after {delay:.2f}s: {exc}"
                     )
                     await asyncio.sleep(delay)
                 else:
